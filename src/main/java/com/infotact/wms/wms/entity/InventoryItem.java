@@ -1,10 +1,7 @@
 package com.infotact.wms.wms.entity;
 
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -22,4 +19,12 @@ public class InventoryItem {
     private String serialNumber;
     private String status;
     private LocalDateTime dataRecieved;
+
+    @ManyToOne
+    @JoinColumn(name="storage_bin_id")
+    private StorageBin storageBin;
+
+    @ManyToOne
+    @JoinColumn(name="product_id",nullable=false)
+    private Product product;
 }
