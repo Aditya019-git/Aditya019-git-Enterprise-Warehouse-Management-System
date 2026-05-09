@@ -25,4 +25,7 @@ public class Product {
     private BigDecimal price;
     private double weight;
 
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL)
+    private List<InventoryItem> inventoryItems;
+
 }
