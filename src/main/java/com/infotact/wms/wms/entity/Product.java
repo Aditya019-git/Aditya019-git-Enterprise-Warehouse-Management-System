@@ -1,6 +1,7 @@
 package com.infotact.wms.wms.entity;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -23,6 +24,7 @@ public class Product {
     private BigDecimal price;
     private double weight;
 
+    @JsonIgnore
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL)
     private List<InventoryItem> inventoryItems;
 

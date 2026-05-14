@@ -1,6 +1,7 @@
 package com.infotact.wms.wms.entity;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -18,6 +19,7 @@ public class Warehouse {
      private String location;
      private Integer totalCapacity;
 
+    @JsonIgnore
      @OneToMany(mappedBy = "warehouse",cascade = CascadeType.ALL)
      private List<StorageBin> storageBins;
 
