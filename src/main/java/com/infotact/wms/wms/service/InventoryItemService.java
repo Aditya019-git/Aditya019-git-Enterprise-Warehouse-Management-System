@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class InventoryItemService {
@@ -81,5 +82,18 @@ public class InventoryItemService {
             return inventoryItemRepository.save(item);
 
     }
+
+    public List<InventoryItem> getItemsBySku(String sku) {
+        return inventoryItemRepository.findByProductSku(sku);
+    }
+
+    public List<InventoryItem> getItemsByWarehouse(Long warehouseId) {
+        return inventoryItemRepository.findByStorageBinWarehouseId(warehouseId);
+    }
+
+    public List<InventoryItem> getItemsByStatus(String status) {
+        return inventoryItemRepository.findByStatusIgnoreCase(status);
+    }
+
 
 }
