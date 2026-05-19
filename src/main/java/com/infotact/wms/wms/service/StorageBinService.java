@@ -6,6 +6,8 @@ import com.infotact.wms.wms.repository.StorageBinRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 public class StorageBinService {
 
@@ -19,5 +21,13 @@ public class StorageBinService {
 
         }
         return storageBinRepository.save(bin);
+    }
+
+    public List<StorageBin> getAvailableBins() {
+        return storageBinRepository.findAvailableBins();
+    }
+
+    public List<StorageBin> getAllBins() {
+        return storageBinRepository.findAll();
     }
 }
