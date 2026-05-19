@@ -55,5 +55,31 @@ public class InventoryItemService {
         return inventoryItemRepository.save(item);
 
     }
+    /**
+     * Ships an item out of the warehouse.
+     * Decrements the occupancy of the storage bin and marks the item status as SHIPPED.
+     */
+    @Transactional
+    public InventoryItem shipItem(Long itemId){
+        InventoryItem item =inventoryItemRepository.findById(itemId).orElseThrow(()->new RuntimeException("Inventory Item not found with id: "+itemId));
+        if(!"AVAILABLE".equalsIgnoreCase(item.getStatus())){
+            throw new RuntimeException("Item is not available for shipping.Current status: "+item.getStatus());
+        }
+
+        StorageBin bin=item.getStorageBin();
+        if(bin!=null) {
+            int newOccupency = bin.getCurrentOccupancy() - 1;
+            if (newOccupency < 0) {
+                newOccupency = 0;
+            }
+            bin.setCurrentOccupancy(newOccupency);
+            storageBinRepository.save(bin);
+        }
+            item.setStatus("SHIPPED");
+            item.setStorageBin(null);
+
+            return inventoryItemRepository.save(item);
+
+    }
 
 }
