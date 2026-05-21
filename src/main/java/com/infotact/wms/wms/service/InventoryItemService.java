@@ -1,9 +1,11 @@
 package com.infotact.wms.wms.service;
 
-
 import com.infotact.wms.wms.entity.InventoryItem;
 import com.infotact.wms.wms.entity.Product;
 import com.infotact.wms.wms.entity.StorageBin;
+import com.infotact.wms.wms.exception.BinFullException;
+import com.infotact.wms.wms.exception.InvalidInventoryStateException;
+import com.infotact.wms.wms.exception.ResourceNotFoundException;
 import com.infotact.wms.wms.repository.InventoryItemRepository;
 import com.infotact.wms.wms.repository.ProductRepository;
 import com.infotact.wms.wms.repository.StorageBinRepository;
@@ -26,20 +28,17 @@ public class InventoryItemService {
     private StorageBinRepository storageBinRepository;
 
     @Transactional
-    public InventoryItem recieveItem(Long productId,Long binId,String serialNumber){
-        //check if product Exists
-        Product product=productRepository.findById(productId).orElseThrow(()-> new RuntimeException("Product not found"));
+    public InventoryItem recieveItem(Long productId, Long binId, String serialNumber) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + productId));
 
-        //check if Bin exists
-        StorageBin  bin =storageBinRepository.findById(binId).orElseThrow(()->new RuntimeException("Storage Bin not Found"));
+        StorageBin bin = storageBinRepository.findById(binId)
+                .orElseThrow(() -> new ResourceNotFoundException("Storage Bin not found with id: " + binId));
 
-        //check if bin has space
-
-        if(bin.getCurrentOccupancy()>= bin.getMaxCapacity()){
-            throw new RuntimeException("bin is Full");
+        if (bin.getCurrentOccupancy() >= bin.getMaxCapacity()) {
+            throw new BinFullException("Bin " + bin.getBinCode() + " is full (Capacity: " + bin.getMaxCapacity() + ").");
         }
 
-        //Create the new Item
         InventoryItem item = new InventoryItem();
         item.setProduct(product);
         item.setStorageBin(bin);
@@ -47,27 +46,23 @@ public class InventoryItemService {
         item.setStatus("Available");
         item.setDataRecieved(LocalDateTime.now());
 
-        //Update the bin's occupancy
-        bin.setCurrentOccupancy((bin.getCurrentOccupancy()+1));
+        bin.setCurrentOccupancy((bin.getCurrentOccupancy() + 1));
         storageBinRepository.save(bin);
 
-        //save the item
         return inventoryItemRepository.save(item);
-
     }
-    /**
-     * Ships an item out of the warehouse.
-     * Decrements the occupancy of the storage bin and marks the item status as SHIPPED.
-     */
+
     @Transactional
-    public InventoryItem shipItem(Long itemId){
-        InventoryItem item =inventoryItemRepository.findById(itemId).orElseThrow(()->new RuntimeException("Inventory Item not found with id: "+itemId));
-        if(!"AVAILABLE".equalsIgnoreCase(item.getStatus())){
-            throw new RuntimeException("Item is not available for shipping.Current status: "+item.getStatus());
+    public InventoryItem shipItem(Long itemId) {
+        InventoryItem item = inventoryItemRepository.findById(itemId)
+                .orElseThrow(() -> new ResourceNotFoundException("Inventory Item not found with id: " + itemId));
+
+        if (!"AVAILABLE".equalsIgnoreCase(item.getStatus())) {
+            throw new InvalidInventoryStateException("Item is not available for shipping. Current status: " + item.getStatus());
         }
 
-        StorageBin bin=item.getStorageBin();
-        if(bin!=null) {
+        StorageBin bin = item.getStorageBin();
+        if (bin != null) {
             int newOccupency = bin.getCurrentOccupancy() - 1;
             if (newOccupency < 0) {
                 newOccupency = 0;
@@ -75,11 +70,9 @@ public class InventoryItemService {
             bin.setCurrentOccupancy(newOccupency);
             storageBinRepository.save(bin);
         }
-            item.setStatus("SHIPPED");
-            item.setStorageBin(null);
+        item.setStatus("SHIPPED");
+        item.setStorageBin(null);
 
-            return inventoryItemRepository.save(item);
-
+        return inventoryItemRepository.save(item);
     }
-
 }

@@ -3,6 +3,7 @@ package com.infotact.wms.wms.controller;
 import java.util.*;
 import com.infotact.wms.wms.entity.Product;
 import com.infotact.wms.wms.repository.ProductRepository;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,7 +15,7 @@ public class ProductController {
     private ProductRepository productRepository;
 
     @PostMapping
-    public Product createProduct(@RequestBody Product product){
+    public Product createProduct(@Valid @RequestBody Product product){
         return productRepository.save(product);
     }
 

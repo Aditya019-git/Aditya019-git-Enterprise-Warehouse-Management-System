@@ -4,6 +4,7 @@ package com.infotact.wms.wms.controller;
 import com.infotact.wms.wms.entity.Warehouse;
 import com.infotact.wms.wms.repository.WarehouseRepository;
 import com.infotact.wms.wms.service.WarehouseService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,7 +23,7 @@ public class WarehouseController {
     }
 
     @PostMapping
-    public ResponseEntity<Warehouse> createWarehouse(@RequestBody Warehouse warehouse){
+    public ResponseEntity<Warehouse> createWarehouse(@Valid @RequestBody Warehouse warehouse){
         Warehouse savedWarehouse=warehouseService.saveWarehouse(warehouse);
         return ResponseEntity.ok(savedWarehouse);
     }
