@@ -20,7 +20,7 @@ public class StorageBinService {
         }
         return storageBinRepository.save(bin);
     }
-}
+
 
     public List<StorageBin> getAvailableBins() {
         return storageBinRepository.findAvailableBins();

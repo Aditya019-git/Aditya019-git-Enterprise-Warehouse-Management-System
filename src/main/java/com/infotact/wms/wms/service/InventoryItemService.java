@@ -76,7 +76,7 @@ public class InventoryItemService {
 
         return inventoryItemRepository.save(item);
     }
-}
+
 
     public List<InventoryItem> getItemsBySku(String sku) {
         return inventoryItemRepository.findByProductSku(sku);
