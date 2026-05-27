@@ -1,7 +1,11 @@
 package com.infotact.wms.wms.repository;
 
 import com.infotact.wms.wms.entity.InventoryItem;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -20,4 +24,9 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem,Lon
 
     // 4. Find all items belonging to a product by ID and status
     List<InventoryItem> findByProductIdAndStatusIgnoreCase(Long productId,String status);
+
+    //5. Pessimistic Write Lock: Select and lock available items to prevent race conditions during shipping
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT i FROM InventoryItem i WHERE i.product.id = :productId AND LOWER(i.status)='available'")
+    List<InventoryItem> findAvailableItemsForFulfillment(@Param("productId") Long productID);
 }

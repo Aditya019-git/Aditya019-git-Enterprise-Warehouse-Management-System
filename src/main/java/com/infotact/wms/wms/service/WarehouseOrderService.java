@@ -71,7 +71,7 @@ public class WarehouseOrderService {
                 int orderedQty = orderItem.getQuantity();
                 // Fetch all active "Available" stock items for this product
                 List<InventoryItem> availableItems = inventoryItemRepository
-                        .findByProductIdAndStatusIgnoreCase(product.getId(), "Available");
+                        .findAvailableItemsForFulfillment(product.getId());
                 // Stock Check Validation
                 if (availableItems.size() < orderedQty) {
                     throw new InsufficientStockException("Insufficient stock to ship product: "
