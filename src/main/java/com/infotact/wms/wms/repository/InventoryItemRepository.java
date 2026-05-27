@@ -17,4 +17,7 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem,Lon
 
     // 3. Find all items physically sitting in a specific warehouse
     List<InventoryItem> findByStorageBinWarehouseId(Long warehouseId);
+
+    // 4. Find all items belonging to a product by ID and status
+    List<InventoryItem> findByProductIdAndStatusIgnoreCase(Long productId,String status);
 }
