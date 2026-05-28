@@ -1,6 +1,7 @@
 package com.infotact.wms.wms.controller;
 
 
+import java.util.List;
 import com.infotact.wms.wms.entity.OrderStatus;
 import com.infotact.wms.wms.entity.WarehouseOrder;
 import com.infotact.wms.wms.service.WarehouseOrderService;
@@ -21,6 +22,12 @@ public class WarehouseOrderController {
     @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
     public ResponseEntity<WarehouseOrder> createOrder(@Valid @RequestBody WarehouseOrder order){
         return ResponseEntity.ok(warehouseOrderService.createOrder(order));
+    }
+
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
+    public ResponseEntity<List<WarehouseOrder>> getAllOrders(){
+        return ResponseEntity.ok(warehouseOrderService.getAllOrders());
     }
 
     @GetMapping("/{id}")
