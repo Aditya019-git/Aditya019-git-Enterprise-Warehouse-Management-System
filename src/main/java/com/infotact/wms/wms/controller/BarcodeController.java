@@ -62,9 +62,9 @@ public class BarcodeController {
     }
 
     //Serves a high-quality printable PNG 2D QR Code representing a warehouse storage bin shelf.
-    @GetMapping(value="/bin/{binCode}",produces =MediaType.IMAGE_PNG_VALUE)
-    public ResponseEntity<byte[]> getBinQRCode(@PathVariable String binCode){
-        StorageBin bin=storageBinRepository.findByBinCode(binCode).orElseThrow(()->new ResourceNotFoundException("Storage Bin not found with code: " + binCode));
+    @GetMapping(value="/bin/{id}",produces =MediaType.IMAGE_PNG_VALUE)
+    public ResponseEntity<byte[]> getBinQRCode(@PathVariable Long id){
+        StorageBin bin=storageBinRepository.findById(id).orElseThrow(()->new ResourceNotFoundException("Storage Bin not found with id: " + id));
 
         try{
             // Generate standard square QR Code (250x250px)
@@ -72,7 +72,7 @@ public class BarcodeController {
             return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).body(imageBytes);
 
         }catch(WriterException|IOException e){
-            throw new RuntimeException("Error generating QR Code for Bin: "+binCode,e);
+            throw new RuntimeException("Error generating QR Code for Bin ID: "+id,e);
         }
 
     }

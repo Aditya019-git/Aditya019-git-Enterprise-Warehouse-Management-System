@@ -3,7 +3,8 @@ import Sidebar from './components/Sidebar';
 import StatCard from './components/StatCard';
 import Login from './components/Login';
 import api from './api';
-import { Package, ShoppingCart, Layers, AlertCircle, Plus, Info, RefreshCw, Building2, MapPin } from 'lucide-react';
+import { Package, ShoppingCart, Layers, AlertCircle, Plus, Info, RefreshCw, Building2, MapPin, Camera } from 'lucide-react';
+import ScannerModal from './components/ScannerModal';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('wms_token'));
@@ -47,6 +48,23 @@ export default function App() {
   const [binSuccess, setBinSuccess] = useState('');
   const [binError, setBinError] = useState('');
 
+  // Form States - Stock Receipt
+  const [recProdId, setRecProdId] = useState('');
+  const [recBinId, setRecBinId] = useState('');
+  const [recSerial, setRecSerial] = useState('');
+  const [recQty, setRecQty] = useState(1);
+  const [recSuccess, setRecSuccess] = useState('');
+  const [recError, setRecError] = useState('');
+
+  // Barcode / QR Label Preview States
+  const [activeLabelUrl, setActiveLabelUrl] = useState('');
+  const [activeLabelTitle, setActiveLabelTitle] = useState('');
+  const [activeLabelType, setActiveLabelType] = useState('');
+
+  // Scanner state controls
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [activeScanField, setActiveScanField] = useState('');
+
   // Form States - Order Creation
   const [orderNum, setOrderNum] = useState('');
   const [orderCust, setOrderCust] = useState('');
@@ -61,6 +79,13 @@ export default function App() {
   const [staffRole, setStaffRole] = useState('ROLE_OPERATOR');
   const [staffSuccess, setStaffSuccess] = useState('');
   const [staffError, setStaffError] = useState('');
+
+  // Shipment Verification States
+  const [verifyingOrder, setVerifyingOrder] = useState(null);
+  const [verificationItems, setVerificationItems] = useState([]);
+  const [verificationError, setVerificationError] = useState('');
+  const [verificationSuccess, setVerificationSuccess] = useState('');
+  const [scannerTargetItemIndex, setScannerTargetItemIndex] = useState(0);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -189,6 +214,124 @@ export default function App() {
     }
   };
 
+  // Receive Stock handler
+  const handleReceiveStock = async (e) => {
+    e.preventDefault();
+    setRecSuccess('');
+    setRecError('');
+    const qty = parseInt(recQty) || 1;
+    const baseSerial = recSerial.trim() || 'SN-AUTO';
+    try {
+      for (let i = 1; i <= qty; i++) {
+        const uniqueSerial = `${baseSerial}-${i}-${Math.floor(Math.random() * 10000)}`;
+        await api.post(`/api/inventory/receive?productId=${recProdId}&binId=${recBinId}&serialNumber=${uniqueSerial}`);
+      }
+      setRecSuccess(`Successfully received ${qty} stock items under prefix: ${baseSerial}!`);
+      setRecSerial('');
+      setRecQty(1);
+      fetchWmsData();
+    } catch (err) {
+      setRecError(err.response?.data?.message || 'Error receiving stock item. Check bin capacity limits.');
+      fetchWmsData();
+    }
+  };
+
+  // Barcode View Action
+  const viewProductBarcode = async (sku, name) => {
+    try {
+      const res = await api.get(`/api/barcodes/product/${sku}/base64`);
+      setActiveLabelUrl(res.data.base64Image);
+      setActiveLabelTitle(`${name} (${sku})`);
+      setActiveLabelType('Product Barcode');
+    } catch (err) {
+      alert('Error fetching barcode: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // QR Code View Action
+  const viewBinQRCode = async (binId, binCode) => {
+    try {
+      const res = await api.get(`/api/barcodes/bin/${binId}`, { responseType: 'blob' });
+      const imgUrl = URL.createObjectURL(res.data);
+      setActiveLabelUrl(imgUrl);
+      setActiveLabelTitle(`Storage Bin: ${binCode}`);
+      setActiveLabelType('Storage QR Code');
+    } catch (err) {
+      alert('Error fetching QR code: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // Scan Success Callback
+  const handleScanSuccess = (decodedText) => {
+    setIsScannerOpen(false);
+    if (activeScanField === 'receiveSerial') {
+      setRecSerial(decodedText);
+    } else if (activeScanField === 'prodSku') {
+      setProdSku(decodedText);
+    } else if (activeScanField === 'orderProduct') {
+      const match = products.find(p => p.sku === decodedText || p.id.toString() === decodedText || p.name === decodedText);
+      if (match) {
+        setOrderProdId(match.id.toString());
+      } else {
+        alert(`Product not found in catalog for scanned code: ${decodedText}`);
+      }
+    } else if (activeScanField === 'verifySku') {
+      handleVerifySkuScan(decodedText);
+    }
+  };
+
+  const handleVerifySkuScan = (scannedSku) => {
+    const item = verificationItems[scannerTargetItemIndex];
+    if (!item) return;
+
+    if (scannedSku.trim() === item.sku) {
+      const updated = [...verificationItems];
+      updated[scannerTargetItemIndex] = {
+        ...item,
+        scannedQty: item.scannedQty + 1
+      };
+      setVerificationItems(updated);
+      setVerificationSuccess(`Correct item! Verified SKU: ${item.sku}`);
+      setVerificationError('');
+      
+      if (updated[scannerTargetItemIndex].scannedQty >= item.quantity) {
+        const nextIndex = updated.findIndex(i => i.scannedQty < i.quantity);
+        if (nextIndex !== -1) {
+          setScannerTargetItemIndex(nextIndex);
+        }
+      }
+    } else {
+      setVerificationError(`Wrong item! Put it back and pick ${item.name} (SKU: ${item.sku}). Scanned: ${scannedSku}`);
+      setVerificationSuccess('');
+    }
+  };
+
+  const handleVerifySkuManual = (index, typedSku) => {
+    const item = verificationItems[index];
+    if (!item) return;
+
+    if (typedSku.trim() === item.sku) {
+      const updated = [...verificationItems];
+      updated[index] = {
+        ...item,
+        scannedQty: item.scannedQty + 1
+      };
+      setVerificationItems(updated);
+      setVerificationSuccess(`Correct item! Verified SKU: ${item.sku}`);
+      setVerificationError('');
+      
+      if (updated[index].scannedQty >= item.quantity) {
+        const nextIndex = updated.findIndex(i => i.scannedQty < i.quantity);
+        if (nextIndex !== -1) {
+          setScannerTargetItemIndex(nextIndex);
+        }
+      }
+    } else {
+      setVerificationError(`Wrong item! Put it back and pick ${item.name} (SKU: ${item.sku}). Scanned: ${typedSku}`);
+      setVerificationSuccess('');
+    }
+  };
+
   // Create Order handler
   const handleCreateOrder = async (e) => {
     e.preventDefault();
@@ -235,11 +378,63 @@ export default function App() {
     }
   };
 
+  const startShipmentVerification = async (order) => {
+    setVerificationError('');
+    setVerificationSuccess('');
+    setScannerTargetItemIndex(0);
+    
+    // Prepare items to verify
+    const itemsToVerify = [];
+    for (const item of order.orderItems || []) {
+      const sku = item.product?.sku;
+      let binCodes = [];
+      try {
+        const res = await api.get(`/api/inventory/filter/sku?sku=${sku}`);
+        const availableInBins = res.data
+          .filter(inv => inv.status && inv.status.toUpperCase() === 'AVAILABLE' && inv.storageBin)
+          .map(inv => inv.storageBin.binCode);
+        binCodes = [...new Set(availableInBins)];
+      } catch (err) {
+        console.error('Error fetching inventory for sku ' + sku, err);
+      }
+      
+      itemsToVerify.push({
+        productId: item.product?.id,
+        sku: sku,
+        name: item.product?.name,
+        quantity: item.quantity,
+        bins: binCodes.length > 0 ? binCodes : ['No bin allocated / Out of stock'],
+        scannedQty: 0
+      });
+    }
+
+    setVerificationItems(itemsToVerify);
+    setVerifyingOrder(order);
+  };
+
+  const executeShipment = async (orderId) => {
+    try {
+      await api.put(`/api/orders/${orderId}/status?status=SHIPPED`);
+      setVerifyingOrder(null);
+      setVerificationItems([]);
+      fetchWmsData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error executing shipment');
+    }
+  };
+
   const advanceOrderStatus = async (orderId, currentStatus) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+
+    if (currentStatus === 'PACKED') {
+      startShipmentVerification(order);
+      return;
+    }
+
     let nextStatus = '';
     if (currentStatus === 'PENDING') nextStatus = 'PICKING';
     else if (currentStatus === 'PICKING') nextStatus = 'PACKED';
-    else if (currentStatus === 'PACKED') nextStatus = 'SHIPPED';
 
     if (!nextStatus) return;
 
@@ -356,10 +551,18 @@ export default function App() {
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label style={{ fontSize: '13px', color: 'var(--text-muted)' }}>SKU Code</label>
-                    <input type="text" value={prodSku} onChange={(e) => setProdSku(e.target.value)} required placeholder="e.g. SKU-BOX-100" style={{
-                      padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)',
-                      backgroundColor: 'rgba(255,255,255,0.02)', color: 'var(--text-main)', fontSize: '14px'
-                    }} />
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input type="text" value={prodSku} onChange={(e) => setProdSku(e.target.value)} required placeholder="e.g. SKU-BOX-100" style={{
+                        flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                        backgroundColor: 'rgba(255,255,255,0.02)', color: 'var(--text-main)', fontSize: '14px'
+                      }} />
+                      <button type="button" onClick={() => { setActiveScanField('prodSku'); setIsScannerOpen(true); }} style={{
+                        padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                        backgroundColor: 'rgba(255,255,255,0.05)', color: 'var(--text-main)', cursor: 'pointer'
+                      }}>
+                        <Camera size={18} />
+                      </button>
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -419,6 +622,15 @@ export default function App() {
                         <strong style={{ fontSize: '16px' }}>{product.name}</strong>
                         <span style={{ fontSize: '11px', color: 'var(--accent-primary)', fontWeight: '600' }}>SKU: {product.sku}</span>
                         <p style={{ fontSize: '13px', color: 'var(--text-muted)', minHeight: '36px', overflow: 'hidden' }}>{product.description || 'No description.'}</p>
+                        
+                        <button onClick={() => viewProductBarcode(product.sku, product.name)} style={{
+                          padding: '8px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                          backgroundColor: 'rgba(255,255,255,0.02)', color: 'var(--text-main)',
+                          fontSize: '12px', cursor: 'pointer', margin: '4px 0', fontWeight: '500'
+                        }}>
+                          Generate Barcode
+                        </button>
+
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderTop: '1px solid var(--glass-border)', paddingTop: '8px', marginTop: '4px' }}>
                           <span>Price: <strong style={{ color: 'var(--success)' }}>${product.price}</strong></span>
                           <span>Weight: <strong>{product.weight} kg</strong></span>
@@ -466,15 +678,23 @@ export default function App() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '12px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <label style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Select SKU Product</label>
-                      <select value={orderProdId} onChange={(e) => setOrderProdId(e.target.value)} required style={{
-                        padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)',
-                        backgroundColor: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '14px'
-                      }}>
-                        <option value="">-- Select SKU --</option>
-                        {products.map(p => (
-                          <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
-                        ))}
-                      </select>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <select value={orderProdId} onChange={(e) => setOrderProdId(e.target.value)} required style={{
+                          flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                          backgroundColor: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '14px'
+                        }}>
+                          <option value="">-- Select SKU --</option>
+                          {products.map(p => (
+                            <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                          ))}
+                        </select>
+                        <button type="button" onClick={() => { setActiveScanField('orderProduct'); setIsScannerOpen(true); }} style={{
+                          padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                          backgroundColor: 'rgba(255,255,255,0.05)', color: 'var(--text-main)', cursor: 'pointer'
+                        }}>
+                          <Camera size={18} />
+                        </button>
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -637,6 +857,75 @@ export default function App() {
                     </button>
                   </form>
                 </div>
+
+                {/* Receive Stock Form */}
+                <div className="glass-card">
+                  <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Plus size={18} /> Receive Inventory Stock
+                  </h3>
+                  <form onSubmit={handleReceiveStock} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {recSuccess && <div style={{ color: 'var(--success)', fontSize: '13px' }}>{recSuccess}</div>}
+                    {recError && <div style={{ color: 'var(--danger)', fontSize: '13px' }}>{recError}</div>}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Select Product</label>
+                      <select value={recProdId} onChange={(e) => setRecProdId(e.target.value)} required style={{
+                        padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                        backgroundColor: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '13px'
+                      }}>
+                        <option value="">-- Choose Product --</option>
+                        {products.map(p => (
+                          <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Select Storage Bin</label>
+                      <select value={recBinId} onChange={(e) => setRecBinId(e.target.value)} required style={{
+                        padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                        backgroundColor: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '13px'
+                      }}>
+                        <option value="">-- Choose Bin --</option>
+                        {bins.map(b => (
+                          <option key={b.id} value={b.id}>{b.binCode} (Available space: {b.maxCapacity - b.currentOccupancy})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '12px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Serial Prefix</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <input type="text" value={recSerial} onChange={(e) => setRecSerial(e.target.value)} required placeholder="e.g. SN-MF" style={{
+                            flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                            backgroundColor: 'rgba(255,255,255,0.02)', color: 'var(--text-main)', fontSize: '13px'
+                          }} />
+                          <button type="button" onClick={() => { setActiveScanField('receiveSerial'); setIsScannerOpen(true); }} style={{
+                            padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                            backgroundColor: 'rgba(255,255,255,0.05)', color: 'var(--text-main)', cursor: 'pointer'
+                          }}>
+                            <Camera size={16} />
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Quantity</label>
+                        <input type="number" min="1" value={recQty} onChange={(e) => setRecQty(e.target.value)} required style={{
+                          padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                          backgroundColor: 'rgba(255,255,255,0.02)', color: 'var(--text-main)', fontSize: '13px'
+                        }} />
+                      </div>
+                    </div>
+
+                    <button type="submit" style={{
+                      padding: '10px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                      backgroundColor: 'var(--accent-primary)', color: 'var(--text-main)', fontWeight: '600', fontSize: '13px', marginTop: '6px'
+                    }}>
+                      Receive Stock
+                    </button>
+                  </form>
+                </div>
               </div>
 
               {/* Warehouse & Storage Bins Layout Display */}
@@ -690,6 +979,14 @@ export default function App() {
                                         transition: 'width 0.3s ease'
                                       }} />
                                     </div>
+
+                                    <button onClick={() => viewBinQRCode(bin.id, bin.binCode)} style={{
+                                      padding: '6px', borderRadius: '6px', border: '1px solid var(--glass-border)',
+                                      backgroundColor: 'rgba(255,255,255,0.02)', color: 'var(--text-main)',
+                                      fontSize: '11px', cursor: 'pointer', marginTop: '6px'
+                                    }}>
+                                      Generate QR Label
+                                    </button>
                                   </div>
                                 );
                               })
@@ -776,6 +1073,211 @@ export default function App() {
       <div style={{ marginLeft: '260px', padding: '40px', minHeight: '100vh' }}>
         {renderContent()}
       </div>
+
+      {/* Barcode/QR Modal Overlay */}
+      {activeLabelUrl && (
+        <div style={{
+          position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh',
+          backgroundColor: 'rgba(2, 6, 23, 0.85)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <div className="glass-card" style={{ width: '400px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '600' }}>{activeLabelType}</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '-10px' }}>{activeLabelTitle}</p>
+            
+            <div style={{
+              backgroundColor: 'white', padding: '24px', borderRadius: '12px',
+              display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '10px 0'
+            }}>
+              <img src={activeLabelUrl} alt="Label" style={{ maxWidth: '100%', height: 'auto' }} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <button onClick={() => {
+                const win = window.open("");
+                win.document.write(`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;">
+                  <h2>${activeLabelType}</h2>
+                  <p>${activeLabelTitle}</p>
+                  <img src="${activeLabelUrl}" style="margin:20px 0;width:300px;" />
+                  <script>window.onload = function() { window.print(); window.close(); }</script>
+                </div>`);
+                win.document.close();
+              }} style={{
+                padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                backgroundColor: 'var(--accent-primary)', color: 'var(--text-main)', fontWeight: '600'
+              }}>
+                Print Label
+              </button>
+              <button onClick={() => {
+                setActiveLabelUrl('');
+                setActiveLabelTitle('');
+              }} style={{
+                padding: '12px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                backgroundColor: 'transparent', color: 'var(--text-main)', cursor: 'pointer'
+              }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shipment Verification Modal Overlay */}
+      {verifyingOrder && (
+        <div style={{
+          position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh',
+          backgroundColor: 'rgba(2, 6, 23, 0.85)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1050
+        }}>
+          <div className="glass-card" style={{ width: '550px', display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div>
+              <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '4px' }}>Order Pick Verification</h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Confirm you picked the right item by scanning the barcode</p>
+            </div>
+
+            <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', fontSize: '14px' }}>
+              <div style={{ marginBottom: '4px' }}><strong>Order Number:</strong> {verifyingOrder.orderNumber}</div>
+              <div><strong>Customer Name:</strong> {verifyingOrder.customerName}</div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {verificationItems.map((item, index) => {
+                const isFullyScanned = item.scannedQty >= item.quantity;
+                return (
+                  <div key={index} style={{
+                    padding: '16px', borderRadius: '12px', border: '1px solid var(--glass-border)',
+                    backgroundColor: isFullyScanned ? 'rgba(16, 185, 129, 0.05)' : 'rgba(255,255,255,0.01)'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      <div>
+                        <strong style={{ fontSize: '15px' }}>{item.name}</strong>
+                        <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Target SKU: <code style={{ color: 'var(--accent-primary)', backgroundColor: 'rgba(255,255,255,0.05)', padding: '2px 4px', borderRadius: '4px' }}>{item.sku}</code></div>
+                      </div>
+                      <span style={{
+                        fontSize: '13px', fontWeight: '600', padding: '4px 10px', borderRadius: '20px',
+                        backgroundColor: isFullyScanned ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                        color: isFullyScanned ? 'var(--success)' : 'var(--danger)'
+                      }}>
+                        Verified: {item.scannedQty} / {item.quantity}
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '13px', marginBottom: '12px', color: 'var(--text-muted)' }}>
+                      📍 Go to storage bin: <strong style={{ color: 'var(--text-main)' }}>{item.bins.join(', ')}</strong>
+                    </div>
+
+                    {!isFullyScanned && (
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          placeholder="Type or scan SKU code..."
+                          id={`sku-input-${index}`}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleVerifySkuManual(index, e.target.value);
+                              e.target.value = '';
+                            }
+                          }}
+                          style={{
+                            flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                            backgroundColor: 'rgba(255,255,255,0.02)', color: 'var(--text-main)', fontSize: '13px', outline: 'none'
+                          }}
+                        />
+                        <button
+                          onClick={() => {
+                            const val = document.getElementById(`sku-input-${index}`).value;
+                            handleVerifySkuManual(index, val);
+                            document.getElementById(`sku-input-${index}`).value = '';
+                          }}
+                          style={{
+                            padding: '8px 12px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                            backgroundColor: 'rgba(255,255,255,0.05)', color: 'var(--text-main)', fontSize: '13px', fontWeight: '500'
+                          }}
+                        >
+                          Verify
+                        </button>
+                        <button
+                          onClick={() => {
+                            setScannerTargetItemIndex(index);
+                            setActiveScanField('verifySku');
+                            setIsScannerOpen(true);
+                          }}
+                          style={{
+                            padding: '8px 12px', borderRadius: '8px', border: 'none', cursor: 'pointer',
+                            backgroundColor: 'var(--accent-primary)', color: 'var(--text-main)', fontSize: '13px', fontWeight: '600',
+                            display: 'flex', alignItems: 'center', gap: '4px'
+                          }}
+                        >
+                          <Camera size={14} /> Scan
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {verificationError && (
+              <div style={{
+                padding: '12px', borderRadius: '8px', backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)', color: '#f87171', fontSize: '14px', fontWeight: '500',
+                display: 'flex', gap: '8px', alignItems: 'center'
+              }}>
+                <AlertCircle size={18} style={{ flexShrink: 0 }} />
+                <span>{verificationError}</span>
+              </div>
+            )}
+
+            {verificationSuccess && (
+              <div style={{
+                padding: '12px', borderRadius: '8px', backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                border: '1px solid rgba(16, 185, 129, 0.2)', color: '#34d399', fontSize: '14px', fontWeight: '500',
+                display: 'flex', gap: '8px', alignItems: 'center'
+              }}>
+                <Info size={18} style={{ flexShrink: 0 }} />
+                <span>{verificationSuccess}</span>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '10px' }}>
+              <button
+                onClick={() => executeShipment(verifyingOrder.id)}
+                disabled={!verificationItems.every(i => i.scannedQty >= i.quantity)}
+                style={{
+                  padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer',
+                  backgroundColor: verificationItems.every(i => i.scannedQty >= i.quantity) ? 'var(--success)' : 'rgba(255,255,255,0.02)',
+                  color: verificationItems.every(i => i.scannedQty >= i.quantity) ? '#fff' : 'var(--text-muted)',
+                  fontWeight: '600', fontSize: '15px',
+                  opacity: verificationItems.every(i => i.scannedQty >= i.quantity) ? 1 : 0.5,
+                  cursor: verificationItems.every(i => i.scannedQty >= i.quantity) ? 'pointer' : 'not-allowed'
+                }}
+              >
+                Fulfill & Ship
+              </button>
+              <button
+                onClick={() => {
+                  setVerifyingOrder(null);
+                  setVerificationItems([]);
+                }}
+                style={{
+                  padding: '14px', borderRadius: '12px', border: '1px solid var(--glass-border)',
+                  backgroundColor: 'transparent', color: 'var(--text-main)', cursor: 'pointer', fontWeight: '500'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Webcam Scanner Overlay */}
+      {isScannerOpen && (
+        <ScannerModal
+          onClose={() => setIsScannerOpen(false)}
+          onScanSuccess={handleScanSuccess}
+        />
+      )}
     </div>
   );
 }
