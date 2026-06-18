@@ -18,6 +18,10 @@ public class ProductController {
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
     public Product createProduct(@Valid @RequestBody Product product){
+        if (product.getSku() != null && productRepository.findBySku(product.getSku().trim()).isPresent()) {
+            throw new IllegalArgumentException("Product with SKU '" + product.getSku().trim() + "' already exists!");
+        }
+        product.setSku(product.getSku().trim());
         return productRepository.save(product);
     }
 

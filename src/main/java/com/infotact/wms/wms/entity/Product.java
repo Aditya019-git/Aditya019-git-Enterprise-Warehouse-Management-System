@@ -21,6 +21,7 @@ public class Product {
 
     @NotBlank(message="SKU is required")
     @Size(min=3,max=20,message="SKU must be between 3 and 20 characters")
+    @Column(unique = true)
     private String sku;  // Unique barcode identifier
 
     @NotBlank(message = "Product name is required")
