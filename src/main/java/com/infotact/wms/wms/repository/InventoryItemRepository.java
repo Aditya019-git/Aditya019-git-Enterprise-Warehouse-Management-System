@@ -29,4 +29,7 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem,Lon
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT i FROM InventoryItem i WHERE i.product.id = :productId AND LOWER(i.status)='available'")
     List<InventoryItem> findAvailableItemsForFulfillment(@Param("productId") Long productID);
+
+    // 6. Find all items physically sitting in a specific storage bin
+    List<InventoryItem> findByStorageBinId(Long binId);
 }

@@ -42,6 +42,8 @@ public class InventoryItemController {
         return inventoryItemService.getItemsByWarehouse(warehouseId);
     }
 
-
-
+    @GetMapping("/bin/{binId}")
+    public List<InventoryItem> getItemsByBin(@PathVariable Long binId){
+        return inventoryItemService.getItemsByBin(binId);
+    }
 }

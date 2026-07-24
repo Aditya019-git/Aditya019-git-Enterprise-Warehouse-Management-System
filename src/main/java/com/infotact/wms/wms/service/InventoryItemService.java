@@ -90,5 +90,7 @@ public class InventoryItemService {
         return inventoryItemRepository.findByStatusIgnoreCase(status);
     }
 
-
+    public List<InventoryItem> getItemsByBin(Long binId) {
+        return inventoryItemRepository.findByStorageBinId(binId);
+    }
 }

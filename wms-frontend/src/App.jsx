@@ -87,6 +87,10 @@ export default function App() {
   const [verificationSuccess, setVerificationSuccess] = useState('');
   const [scannerTargetItemIndex, setScannerTargetItemIndex] = useState(0);
 
+  // Bin Contents Details States
+  const [selectedBinItems, setSelectedBinItems] = useState(null);
+  const [selectedBinCode, setSelectedBinCode] = useState('');
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchWmsData();
@@ -258,6 +262,16 @@ export default function App() {
       setActiveLabelType('Storage QR Code');
     } catch (err) {
       alert('Error fetching QR code: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const inspectBinContents = async (binId, binCode) => {
+    try {
+      const res = await api.get(`/api/inventory/bin/${binId}`);
+      setSelectedBinItems(res.data);
+      setSelectedBinCode(binCode);
+    } catch (err) {
+      alert('Error fetching bin items: ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -980,13 +994,22 @@ export default function App() {
                                       }} />
                                     </div>
 
-                                    <button onClick={() => viewBinQRCode(bin.id, bin.binCode)} style={{
-                                      padding: '6px', borderRadius: '6px', border: '1px solid var(--glass-border)',
-                                      backgroundColor: 'rgba(255,255,255,0.02)', color: 'var(--text-main)',
-                                      fontSize: '11px', cursor: 'pointer', marginTop: '6px'
-                                    }}>
-                                      Generate QR Label
-                                    </button>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '6px' }}>
+                                      <button onClick={() => inspectBinContents(bin.id, bin.binCode)} style={{
+                                        padding: '6px', borderRadius: '6px', border: '1px solid var(--glass-border)',
+                                        backgroundColor: 'rgba(255,255,255,0.05)', color: 'var(--text-main)',
+                                        fontSize: '11px', cursor: 'pointer', fontWeight: '500'
+                                      }}>
+                                        View Items
+                                      </button>
+                                      <button onClick={() => viewBinQRCode(bin.id, bin.binCode)} style={{
+                                        padding: '6px', borderRadius: '6px', border: '1px solid var(--glass-border)',
+                                        backgroundColor: 'rgba(255,255,255,0.02)', color: 'var(--text-main)',
+                                        fontSize: '11px', cursor: 'pointer'
+                                      }}>
+                                        QR Label
+                                      </button>
+                                    </div>
                                   </div>
                                 );
                               })
@@ -1265,6 +1288,85 @@ export default function App() {
                 }}
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bin Inventory Details Modal Overlay */}
+      {selectedBinItems && (
+        <div style={{
+          position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh',
+          backgroundColor: 'rgba(2, 6, 23, 0.85)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1060
+        }}>
+          <div className="glass-card" style={{ width: '600px', display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '4px' }}>Bin Contents Lookup</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Items physically stored on shelf: <strong style={{ color: 'var(--text-main)' }}>{selectedBinCode}</strong></p>
+              </div>
+              <button 
+                onClick={() => setSelectedBinItems(null)}
+                style={{
+                  padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--glass-border)',
+                  backgroundColor: 'rgba(255,255,255,0.02)', color: 'var(--text-main)', cursor: 'pointer', fontSize: '13px'
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div style={{ maxHeight: '400px', overflowY: 'auto', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+              {selectedBinItems.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: '14px', textAlign: 'center', padding: '32px' }}>
+                  This storage bin is empty. No inventory items stored here.
+                </p>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--glass-border)' }}>
+                      <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '500' }}>Product Name</th>
+                      <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '500' }}>SKU</th>
+                      <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '500' }}>Serial Number</th>
+                      <th style={{ padding: '12px 16px', color: 'var(--text-muted)', fontWeight: '500' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedBinItems.map((item) => (
+                      <tr key={item.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.02)' }}>
+                        <td style={{ padding: '12px 16px', fontWeight: '500' }}>{item.product?.name}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <code style={{ color: 'var(--accent-primary)', backgroundColor: 'rgba(255,255,255,0.05)', padding: '2px 4px', borderRadius: '4px' }}>
+                            {item.product?.sku}
+                          </code>
+                        </td>
+                        <td style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>{item.serialNumber}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{
+                            fontSize: '11px', fontWeight: '600', padding: '2px 8px', borderRadius: '20px',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)'
+                          }}>
+                            {item.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+              <button
+                onClick={() => setSelectedBinItems(null)}
+                style={{
+                  padding: '12px 24px', borderRadius: '12px', border: 'none', cursor: 'pointer',
+                  backgroundColor: 'var(--accent-primary)', color: 'var(--text-main)', fontWeight: '600'
+                }}
+              >
+                Close Viewer
               </button>
             </div>
           </div>
